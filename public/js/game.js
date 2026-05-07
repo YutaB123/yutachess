@@ -1,17 +1,24 @@
 const socket = io({ transports: ['websocket'] });
 
-let game = null;
-let board = null;
-let myColor = null;
-let myRoomId = null;
-let selectedTC = null; // { minutes, increment }
+let game        = null;
+let board       = null;
+let myColor     = null;
+let myRoomId    = null;
+let selectedTC  = null;
+
+// Click-to-move state
+let selectedSquare    = null;
+let clickListenerAdded = false;
+
+// Move history
+let moveHistory = [];
 
 // Clock state
 let clockInterval = null;
-let whiteClock = 0;
-let blackClock = 0;
+let whiteClock    = 0;
+let blackClock    = 0;
 
-// ─── Piece theme (inline SVG, no CDN) ───────────────
+// ─── Piece theme ─────────────────────────────────────
 const PIECE_SOLID = {
   wK: '♚', wQ: '♛', wR: '♜', wB: '♝', wN: '♞', wP: '♟',
   bK: '♚', bQ: '♛', bR: '♜', bB: '♝', bN: '♞', bP: '♟',
@@ -100,14 +107,17 @@ socket.on('game_start', ({ color, timeControl, whiteTime, blackTime }) => {
   myColor    = color;
   whiteClock = whiteTime;
   blackClock = blackTime;
-  $('game-overlay').classList.add('hidden'); // close overlay on rematch
+  moveHistory = [];
+  $('game-overlay').classList.add('hidden');
   show('playing');
   initBoard(timeControl);
 });
 
 socket.on('move_made', ({ from, to, promotion, fen, inCheck, gameOver, winner, drawReason, times }) => {
-  game.move({ from, to, promotion });
+  const move = game.move({ from, to, promotion });
   board.position(fen, false);
+  clearHighlights();
+  if (move) addMoveToHistory(move);
   syncClocks(times);
   setStatus({ inCheck, gameOver, winner, drawReason });
 });
@@ -132,12 +142,8 @@ socket.on('timeout', ({ loser }) => {
 });
 
 socket.on('rematch_requested', () => {
-  // Opponent clicked Play Again — update waiting message if we already clicked too
   const btns = $('overlay-btns');
-  if (btns.dataset.state === 'waiting') {
-    // We already clicked — nothing needed, server will fire game_start
-  } else {
-    // We haven't clicked yet — nudge the button
+  if (btns.dataset.state !== 'waiting') {
     const hint = btns.querySelector('.rematch-hint');
     if (!hint) {
       const p = document.createElement('p');
@@ -170,58 +176,149 @@ socket.on('opponent_left', () => {
 
 // ─── Board init ──────────────────────────────────────
 function initBoard(timeControl) {
-  game = new Chess();
+  game           = new Chess();
+  selectedSquare = null;
+  moveHistory    = [];
+  renderMoveHistory();
 
   board = Chessboard('board', {
-    draggable: true,
-    position: 'start',
-    orientation: myColor,
-    pieceTheme: PIECE_THEME,
-    onDragStart,
-    onDrop,
-    onSnapEnd,
+    draggable:    false,
+    position:     'start',
+    orientation:  myColor,
+    pieceTheme:   PIECE_THEME,
   });
 
-  const oppColor = myColor === 'white' ? 'Black ♟' : 'White ♙';
-  const myLabel  = myColor === 'white' ? 'White ♙' : 'Black ♟';
-  $('color-label').textContent    = `You — ${myLabel}`;
-  $('opponent-label').textContent = `Opponent — ${oppColor}`;
-  $('room-label').textContent     = `Room: ${myRoomId}`;
+  if (!clickListenerAdded) {
+    $('board-container').addEventListener('click', handleBoardClick);
+    clickListenerAdded = true;
+  }
+
+  const isWhite = myColor === 'white';
+  $('color-label').innerHTML    = `<span class="player-dot ${myColor}"></span> You`;
+  $('opponent-label').innerHTML = `<span class="player-dot ${isWhite ? 'black' : 'white'}"></span> Opponent`;
+  $('room-label').textContent   = `Room: ${myRoomId}`;
 
   window.addEventListener('resize', () => board.resize());
   startClock();
   setStatus({});
 }
 
-// ─── Drag handlers ───────────────────────────────────
-function onDragStart(source, piece) {
-  if (game.game_over()) return false;
-  const myTurn = (myColor === 'white' && game.turn() === 'w') ||
-                 (myColor === 'black' && game.turn() === 'b');
-  if (!myTurn) return false;
-  return (myColor === 'white' && piece[0] === 'w') ||
-         (myColor === 'black' && piece[0] === 'b');
+// ─── Click-to-move ───────────────────────────────────
+function handleBoardClick(e) {
+  const squareEl = e.target.closest('[data-square]');
+  if (!squareEl) return;
+  onSquareClick(squareEl.getAttribute('data-square'));
 }
 
-function onDrop(source, target) {
-  const move = game.move({ from: source, to: target, promotion: 'q' });
-  if (!move) return 'snapback';
+function onSquareClick(square) {
+  if (!game || game.game_over()) return;
 
-  socket.emit('move', { from: source, to: target, promotion: 'q' });
+  const myTurn = (myColor === 'white' && game.turn() === 'w') ||
+                 (myColor === 'black' && game.turn() === 'b');
+  if (!myTurn) return;
 
-  if (game.game_over()) {
-    let winner = null, drawReason = null;
-    if (game.in_checkmate())    winner     = myColor;
-    else if (game.in_stalemate()) drawReason = 'stalemate';
-    else                          drawReason = 'draw';
-    setStatus({ gameOver: true, winner, drawReason });
+  if (selectedSquare) {
+    // Clicking same square deselects
+    if (selectedSquare === square) {
+      clearHighlights();
+      selectedSquare = null;
+      return;
+    }
+
+    // Try the move
+    const move = game.move({ from: selectedSquare, to: square, promotion: 'q' });
+    if (move) {
+      clearHighlights();
+      selectedSquare = null;
+      board.position(game.fen(), false);
+      socket.emit('move', { from: move.from, to: move.to, promotion: 'q' });
+      addMoveToHistory(move);
+
+      if (game.game_over()) {
+        let winner = null, drawReason = null;
+        if (game.in_checkmate())      winner     = myColor;
+        else if (game.in_stalemate()) drawReason = 'stalemate';
+        else                          drawReason = 'draw';
+        setStatus({ gameOver: true, winner, drawReason });
+      } else {
+        setStatus({ inCheck: game.in_check() });
+      }
+      return;
+    }
+
+    // Reselect another own piece
+    const piece = game.get(square);
+    const mine  = myColor === 'white' ? 'w' : 'b';
+    if (piece && piece.color === mine) {
+      clearHighlights();
+      selectSquare(square);
+    } else {
+      clearHighlights();
+      selectedSquare = null;
+    }
   } else {
-    setStatus({ inCheck: game.in_check() });
+    const piece = game.get(square);
+    const mine  = myColor === 'white' ? 'w' : 'b';
+    if (!piece || piece.color !== mine) return;
+    selectSquare(square);
   }
 }
 
-function onSnapEnd() {
-  board.position(game.fen());
+function selectSquare(square) {
+  selectedSquare = square;
+  highlightSquare(square, 'highlight-selected');
+  game.moves({ square, verbose: true }).forEach(m => {
+    highlightSquare(m.to, game.get(m.to) ? 'highlight-capture' : 'highlight-move');
+  });
+}
+
+function clearHighlights() {
+  document.querySelectorAll('.highlight-selected, .highlight-move, .highlight-capture')
+    .forEach(el => el.classList.remove('highlight-selected', 'highlight-move', 'highlight-capture'));
+}
+
+function highlightSquare(square, cls) {
+  const el = document.querySelector(`[data-square="${square}"]`);
+  if (el) el.classList.add(cls);
+}
+
+// ─── Move history ────────────────────────────────────
+function addMoveToHistory(move) {
+  moveHistory.push(move);
+  renderMoveHistory();
+}
+
+function renderMoveHistory() {
+  const list = $('move-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  for (let i = 0; i < moveHistory.length; i += 2) {
+    const row = document.createElement('div');
+    row.className = 'move-row';
+
+    const num = document.createElement('span');
+    num.className   = 'move-num';
+    num.textContent = `${Math.floor(i / 2) + 1}.`;
+
+    const white = document.createElement('span');
+    white.className   = 'move-san';
+    white.textContent = moveHistory[i].san;
+
+    row.appendChild(num);
+    row.appendChild(white);
+
+    if (moveHistory[i + 1]) {
+      const black = document.createElement('span');
+      black.className   = 'move-san';
+      black.textContent = moveHistory[i + 1].san;
+      row.appendChild(black);
+    }
+
+    list.appendChild(row);
+  }
+
+  list.scrollTop = list.scrollHeight;
 }
 
 // ─── Clock ───────────────────────────────────────────
@@ -252,9 +349,8 @@ function renderClocks() {
   const oppTime  = myColor === 'white' ? blackClock : whiteClock;
   const myTurn   = (myColor === 'white' && game?.turn() === 'w') ||
                    (myColor === 'black' && game?.turn() === 'b');
-
-  updateClock($('your-clock'),      yourTime, myTurn);
-  updateClock($('opponent-clock'),  oppTime, !myTurn);
+  updateClock($('your-clock'),     yourTime,  myTurn);
+  updateClock($('opponent-clock'), oppTime,  !myTurn);
 }
 
 function updateClock(el, ms, active) {
@@ -288,7 +384,6 @@ function setStatus({ inCheck, gameOver, winner, drawReason } = {}) {
 
   const myTurn = (myColor === 'white' && game?.turn() === 'w') ||
                  (myColor === 'black' && game?.turn() === 'b');
-
   dot.className = `turn-dot ${game?.turn() === 'w' ? 'white' : 'black'}`;
 
   if (inCheck) {
@@ -321,7 +416,6 @@ function setOverlayButtons(mode) {
       <a href="/" class="btn btn-ghost">Home</a>
     `;
     $('overlay-play-again').addEventListener('click', requestRematch);
-
   } else if (mode === 'waiting') {
     btns.innerHTML = `
       <div class="rematch-waiting">
@@ -330,7 +424,6 @@ function setOverlayButtons(mode) {
       </div>
       <a href="/" class="btn btn-ghost">Cancel</a>
     `;
-
   } else if (mode === 'home-only') {
     btns.innerHTML = `<a href="/" class="btn btn-primary">Home</a>`;
   }
