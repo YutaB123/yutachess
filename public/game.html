@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>yutachess</title>
+  <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="game-body">
+
+  <!-- Time control picker (shown when creating a new game) -->
+  <div id="screen-setup" class="screen center-screen hidden">
+    <div class="setup-card">
+      <div class="setup-logo">♟</div>
+      <h2 class="setup-title">Choose Time Control</h2>
+
+      <div class="tc-group">
+        <div class="tc-group-header">
+          <span class="tc-group-name">⚡ Bullet</span>
+          <span class="tc-group-range">Under 3 minutes per player</span>
+        </div>
+        <p class="tc-group-desc">Extremely fast — heavily tests pattern recognition over calculation.</p>
+        <div class="tc-grid">
+          <button class="tc-btn" data-minutes="1" data-increment="0">
+            <span class="tc-label">1+0</span>
+            <span class="tc-sub">1 min, no increment</span>
+          </button>
+          <button class="tc-btn" data-minutes="2" data-increment="1">
+            <span class="tc-label">2+1</span>
+            <span class="tc-sub">2 min + 1s/move</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="tc-group">
+        <div class="tc-group-header">
+          <span class="tc-group-name">🔥 Blitz</span>
+          <span class="tc-group-range">3–10 minutes per player</span>
+        </div>
+        <p class="tc-group-desc">Popular online and in casual tournaments. Mistakes are common due to time pressure.</p>
+        <div class="tc-grid">
+          <button class="tc-btn" data-minutes="3" data-increment="0">
+            <span class="tc-label">3+0</span>
+            <span class="tc-sub">3 min, no increment</span>
+          </button>
+          <button class="tc-btn" data-minutes="3" data-increment="2">
+            <span class="tc-label">3+2</span>
+            <span class="tc-sub">3 min + 2s/move</span>
+          </button>
+          <button class="tc-btn" data-minutes="5" data-increment="0">
+            <span class="tc-label">5+0</span>
+            <span class="tc-sub">5 min, no increment</span>
+          </button>
+          <button class="tc-btn" data-minutes="5" data-increment="3">
+            <span class="tc-label">5+3</span>
+            <span class="tc-sub">5 min + 3s/move</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="tc-group">
+        <div class="tc-group-header">
+          <span class="tc-group-name">🕐 Rapid</span>
+          <span class="tc-group-range">10–60 minutes per player</span>
+        </div>
+        <p class="tc-group-desc">A middle ground — enough time for real strategy but still exciting.</p>
+        <div class="tc-grid">
+          <button class="tc-btn" data-minutes="10" data-increment="0">
+            <span class="tc-label">10+0</span>
+            <span class="tc-sub">10 min, no increment</span>
+          </button>
+          <button class="tc-btn" data-minutes="15" data-increment="10">
+            <span class="tc-label">15+10</span>
+            <span class="tc-sub">15 min + 10s/move</span>
+          </button>
+          <button class="tc-btn" data-minutes="25" data-increment="10">
+            <span class="tc-label">25+10</span>
+            <span class="tc-sub">25 min + 10s/move</span>
+          </button>
+          <button class="tc-btn" data-minutes="30" data-increment="0">
+            <span class="tc-label">30+0</span>
+            <span class="tc-sub">30 min, no increment</span>
+          </button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary full-width" id="create-btn" disabled>Create Game</button>
+      <a href="/" class="btn btn-ghost full-width">Cancel</a>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="screen-loading" class="screen center-screen hidden">
+    <div class="spinner"></div>
+    <p id="loading-msg" class="loading-text">Loading...</p>
+  </div>
+
+  <!-- Waiting for opponent -->
+  <div id="screen-waiting" class="screen center-screen hidden">
+    <div class="waiting-card">
+      <div class="waiting-icon">♟</div>
+      <h2>Waiting for opponent</h2>
+      <p class="waiting-hint">Share this code with your friend:</p>
+      <div class="room-code" id="room-code-display">——</div>
+      <p class="waiting-hint">Or share a direct link:</p>
+      <div class="share-row">
+        <input id="share-link" class="share-input" readonly />
+        <button id="copy-btn" class="btn btn-small">Copy</button>
+      </div>
+      <div id="waiting-tc" class="waiting-tc"></div>
+      <a href="/" class="btn btn-ghost">Cancel</a>
+    </div>
+  </div>
+
+  <!-- Game -->
+  <div id="screen-playing" class="screen hidden">
+    <header class="game-header">
+      <a href="/" class="back-link">← Home</a>
+      <span class="header-title">yutachess</span>
+      <span id="room-label" class="room-tag"></span>
+    </header>
+
+    <div class="game-layout">
+      <div class="board-section">
+        <div class="player-bar">
+          <span id="opponent-label" class="player-name">Opponent</span>
+          <div id="opponent-clock" class="clock-display">—</div>
+        </div>
+
+        <div id="board-container">
+          <div id="board"></div>
+        </div>
+
+        <div class="player-bar">
+          <span id="color-label" class="player-name">You</span>
+          <div id="your-clock" class="clock-display">—</div>
+        </div>
+      </div>
+
+      <div class="sidebar">
+        <div id="status-card" class="status-card">
+          <div class="turn-dot" id="turn-dot"></div>
+          <span id="status-text">—</span>
+        </div>
+        <button class="btn btn-ghost full-width" id="new-game-btn">New Game</button>
+      </div>
+    </div>
+
+    <!-- Game over overlay -->
+    <div id="game-overlay" class="overlay hidden">
+      <div class="overlay-card">
+        <div class="overlay-icon" id="overlay-icon"></div>
+        <p class="overlay-msg" id="overlay-msg"></p>
+        <div id="overlay-btns"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div id="screen-error" class="screen center-screen hidden">
+    <div class="error-card">
+      <div class="error-icon">✕</div>
+      <p id="error-msg" class="error-text">Something went wrong.</p>
+      <a href="/" class="btn btn-primary">Go Back</a>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/game.js"></script>
+</body>
+</html>

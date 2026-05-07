@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>yutachess</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="home-body">
+  <div class="home-container">
+    <div class="logo">♟</div>
+    <h1 class="title">yutachess</h1>
+    <p class="subtitle">Play with a friend online</p>
+
+    <div class="home-actions">
+      <a href="/game.html" class="btn btn-primary">Create Game</a>
+
+      <div class="divider">or</div>
+
+      <div class="join-row">
+        <input
+          id="room-input"
+          class="room-input"
+          type="text"
+          placeholder="Enter room code"
+          maxlength="6"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="btn btn-secondary" id="join-btn">Join</button>
+      </div>
+      <p id="join-error" class="join-error hidden"></p>
+    </div>
+  </div>
+
+  <script>
+    const input = document.getElementById('room-input');
+    const joinBtn = document.getElementById('join-btn');
+    const errEl = document.getElementById('join-error');
+
+    input.addEventListener('input', () => {
+      input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      errEl.classList.add('hidden');
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') joinBtn.click();
+    });
+
+    joinBtn.addEventListener('click', () => {
+      const code = input.value.trim();
+      if (code.length < 4) {
+        errEl.textContent = 'Please enter a valid room code.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      window.location.href = `/game.html?room=${code}`;
+    });
+  </script>
+</body>
+</html>
