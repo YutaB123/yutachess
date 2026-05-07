@@ -179,6 +179,20 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('resign', () => {
+    const { roomId, color } = socket.data;
+    if (!roomId || !color) return;
+    const room = rooms.get(roomId);
+    if (!room || room.status !== 'playing') return;
+
+    if (room.timeoutHandle) clearTimeout(room.timeoutHandle);
+    room.timeoutHandle = null;
+    room.status  = 'gameover';
+    room.rematch = { white: false, black: false };
+
+    io.to(roomId).emit('player_resigned', { resigner: color });
+  });
+
   socket.on('disconnect', () => {
     const { roomId } = socket.data;
     if (!roomId) return;

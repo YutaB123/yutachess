@@ -166,6 +166,17 @@ socket.on('join_error', ({ message }) => {
   show('error');
 });
 
+socket.on('player_resigned', ({ resigner }) => {
+  stopClock();
+  clearHighlights();
+  if (resigner === myColor) {
+    showOverlay('You resigned.', 'lose');
+  } else {
+    showOverlay('Opponent resigned. You win!', 'win');
+  }
+  $('resign-btn').classList.add('hidden');
+});
+
 socket.on('opponent_left', () => {
   stopClock();
   $('overlay-icon').textContent = '🔌';
@@ -197,6 +208,10 @@ function initBoard(timeControl) {
   $('color-label').innerHTML    = `<span class="player-dot ${myColor}"></span> You`;
   $('opponent-label').innerHTML = `<span class="player-dot ${isWhite ? 'black' : 'white'}"></span> Opponent`;
   $('room-label').textContent   = `Room: ${myRoomId}`;
+
+  $('resign-btn').textContent = 'Resign';
+  $('resign-btn').classList.remove('confirming', 'hidden');
+  resignPending = false;
 
   window.addEventListener('resize', () => board.resize());
   startClock();
@@ -368,6 +383,7 @@ function setStatus({ inCheck, gameOver, winner, drawReason } = {}) {
 
   if (gameOver) {
     stopClock();
+    $('resign-btn').classList.add('hidden');
     card.className = 'status-card gameover';
     dot.className  = 'turn-dot';
     if (winner) {
@@ -435,6 +451,27 @@ function requestRematch() {
 }
 
 // ─── Button handlers ─────────────────────────────────
+// ─── Resign button ───────────────────────────────────
+let resignPending = false;
+let resignTimer   = null;
+
+$('resign-btn').addEventListener('click', () => {
+  if (!resignPending) {
+    resignPending = true;
+    $('resign-btn').textContent = 'Confirm Resign?';
+    $('resign-btn').classList.add('confirming');
+    resignTimer = setTimeout(() => {
+      resignPending = false;
+      $('resign-btn').textContent = 'Resign';
+      $('resign-btn').classList.remove('confirming');
+    }, 3000);
+  } else {
+    clearTimeout(resignTimer);
+    socket.emit('resign');
+    $('resign-btn').classList.add('hidden');
+  }
+});
+
 $('copy-btn').addEventListener('click', () => {
   navigator.clipboard.writeText($('share-link').value).then(() => {
     $('copy-btn').textContent = 'Copied!';
