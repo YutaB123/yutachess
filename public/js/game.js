@@ -240,8 +240,17 @@ function onSquareClick(square) {
       return;
     }
 
-    // Try the move
-    const move = game.move({ from: selectedSquare, to: square, promotion: 'q' });
+    // Try the move; if clicking own rook while king selected, resolve castling square
+    let castleTo = null;
+    const selPiece = game.get(selectedSquare);
+    const tgtPiece = game.get(square);
+    const mine = myColor === 'white' ? 'w' : 'b';
+    if (selPiece && selPiece.type === 'k' && selPiece.color === mine &&
+        tgtPiece && tgtPiece.type === 'r' && tgtPiece.color === mine) {
+      const rank = selectedSquare[1];
+      castleTo = (square[0] === 'h') ? ('g' + rank) : ('c' + rank);
+    }
+    const move = game.move({ from: selectedSquare, to: castleTo || square, promotion: 'q' });
     if (move) {
       clearHighlights();
       selectedSquare = null;
@@ -263,7 +272,6 @@ function onSquareClick(square) {
 
     // Reselect another own piece
     const piece = game.get(square);
-    const mine  = myColor === 'white' ? 'w' : 'b';
     if (piece && piece.color === mine) {
       clearHighlights();
       selectSquare(square);
@@ -284,6 +292,11 @@ function selectSquare(square) {
   highlightSquare(square, 'highlight-selected');
   game.moves({ square, verbose: true }).forEach(m => {
     highlightSquare(m.to, game.get(m.to) ? 'highlight-capture' : 'highlight-move');
+    // Also light up the rook square so clicking it castles
+    if (m.san === 'O-O' || m.san === 'O-O-O') {
+      const rank = square[1];
+      highlightSquare((m.san === 'O-O' ? 'h' : 'a') + rank, 'highlight-move');
+    }
   });
 }
 
