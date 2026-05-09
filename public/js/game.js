@@ -118,6 +118,7 @@ socket.on('move_made', ({ from, to, promotion, fen, inCheck, gameOver, winner, d
   board.position(fen, false);
   clearHighlights();
   if (move) addMoveToHistory(move);
+  updateMaterial();
   syncClocks(times);
   setStatus({ inCheck, gameOver, winner, drawReason });
 });
@@ -216,6 +217,51 @@ function initBoard(timeControl) {
   window.addEventListener('resize', () => board.resize());
   startClock();
   setStatus({});
+  updateMaterial();
+}
+
+// ─── Material tracker ────────────────────────────────
+const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+const PIECE_START  = { p: 8, n: 2, b: 2, r: 2, q: 1 };
+const PIECE_ORDER  = ['q', 'r', 'b', 'n', 'p'];
+const DARK_SYMS    = { q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
+const LIGHT_SYMS   = { q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' };
+
+function updateMaterial() {
+  if (!game || !myColor) return;
+  const on = { w: { p:0,n:0,b:0,r:0,q:0 }, b: { p:0,n:0,b:0,r:0,q:0 } };
+  for (const row of game.board()) for (const sq of row) {
+    if (sq && sq.type !== 'k') on[sq.color][sq.type]++;
+  }
+  const wCap = {}, bCap = {};
+  for (const t of PIECE_ORDER) {
+    wCap[t] = PIECE_START[t] - on.b[t];
+    bCap[t] = PIECE_START[t] - on.w[t];
+  }
+  let wScore = 0, bScore = 0;
+  for (const t of PIECE_ORDER) {
+    wScore += on.w[t] * PIECE_VALUES[t];
+    bScore += on.b[t] * PIECE_VALUES[t];
+  }
+  const diff = wScore - bScore;
+  const isWhite  = myColor === 'white';
+  const yourCap  = isWhite ? wCap : bCap;
+  const oppCap   = isWhite ? bCap : wCap;
+  const yourSyms = isWhite ? DARK_SYMS : LIGHT_SYMS;
+  const oppSyms  = isWhite ? LIGHT_SYMS : DARK_SYMS;
+  const yourAdv  = isWhite ? diff : -diff;
+
+  function renderBar(caps, syms, adv) {
+    let pieces = '';
+    for (const t of PIECE_ORDER) {
+      for (let i = 0; i < caps[t]; i++) pieces += `<span class="mat-piece">${syms[t]}</span>`;
+    }
+    const advHtml = adv > 0 ? `<span class="material-adv">+${adv}</span>` : '';
+    return `<span class="material-pieces">${pieces}</span>${advHtml}`;
+  }
+
+  $('your-material').innerHTML = renderBar(yourCap, yourSyms, yourAdv);
+  $('opp-material').innerHTML  = renderBar(oppCap,  oppSyms,  -yourAdv);
 }
 
 // ─── Click-to-move ───────────────────────────────────
@@ -257,6 +303,7 @@ function onSquareClick(square) {
       board.position(game.fen(), false);
       socket.emit('move', { from: move.from, to: move.to, promotion: 'q' });
       addMoveToHistory(move);
+      updateMaterial();
 
       if (game.game_over()) {
         let winner = null, drawReason = null;

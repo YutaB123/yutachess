@@ -647,6 +647,40 @@ a { color: inherit; text-decoration: none; }
 
 .feature span { font-size: 13px; }
 
+/* ─── Material tracker ──────────────────────────────── */
+.material-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  padding: 0 4px;
+}
+
+.material-pieces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  letter-spacing: -2px;
+  line-height: 1;
+}
+
+.mat-piece {
+  font-size: 16px;
+  opacity: 0.75;
+}
+
+.material-adv {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+  background: rgba(34,197,94,0.12);
+  border: 1px solid rgba(34,197,94,0.3);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 4px;
+  letter-spacing: 0;
+}
+
 /* ─── Responsive ────────────────────────────────────── */
 @media (max-width: 640px) {
   .sidebar { width: 100%; padding-top: 0; }
